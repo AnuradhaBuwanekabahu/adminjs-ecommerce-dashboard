@@ -7,6 +7,7 @@ const sequelize = require("./config/db");
 const authRoutes = require("./routes/auth");
 const signupRoutes = require("./routes/signup");
 const productRoutes = require("./routes/product");
+const categoryRoutes = require("./routes/category");
 const orderRoutes = require("./routes/order");
 const settingRoutes = require("./routes/setting");
 const setupAdmin = require("./admin/admin");
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use("/api/login", authRoutes);
 app.use("/api/signup", signupRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/categories", categoryRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/settings", settingRoutes);
 
@@ -32,6 +34,8 @@ Order.hasMany(OrderItem);
 OrderItem.belongsTo(Order);
 Product.hasMany(OrderItem);
 OrderItem.belongsTo(Product);
+Category.hasMany(Product);
+Product.belongsTo(Category);
 
 sequelize.sync({ alter: true }).then(async () => {
   // Admin panel
