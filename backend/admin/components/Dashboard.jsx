@@ -1,12 +1,10 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Box, H2, Text, Badge, Icon, Button } from "@adminjs/design-system";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
   AreaChart, Area
 } from 'recharts';
-
-// --- Real-time Analytics Component ---
 
 // --- UI Components ---
 
@@ -27,7 +25,7 @@ const SummaryCard = ({ title, value, icon, color, gradient, chartData }) => (
     <Box display="flex" justifyContent="space-between" alignItems="flex-start">
       <Box>
         <Text fontSize="14px" fontWeight="500" opacity={gradient ? 0.8 : 0.6}>{title}</Text>
-        <H2 mt="xs" color="inherit" fontWeight="700">${value}</H2>
+        <H2 mt="xs" color="inherit" fontWeight="700">{title === "Total Revenue" ? "$" : ""}{value}</H2>
       </Box>
       <Box 
         style={{ 
@@ -56,9 +54,26 @@ const SummaryCard = ({ title, value, icon, color, gradient, chartData }) => (
 );
 
 const Dashboard = (props) => {
-  const { currentAdmin, data } = props;
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Real data from backend handler (All Models Integrated)
+  useEffect(() => {
+    console.log('[Dashboard] Attempting to fetch live data...');
+    fetch('/admin/api/dashboard')
+      .then(res => res.json())
+      .then(json => {
+        console.log('[Dashboard] Data fetched successfully:', json);
+        setDashboardData(json);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error('[Dashboard] Fetch failed:', err);
+        setLoading(false);
+      });
+  }, []);
+
+  const data = dashboardData || props.data || {};
+  
   const { 
     totalIncome = 0, 
     productCount = 0, 
@@ -71,7 +86,7 @@ const Dashboard = (props) => {
     salesData = [],
     latestOrderId = 'Searching...',
     lastUpdate = 'Pending...'
-  } = (data || {});
+  } = data;
 
   return (
     <Box style={{ background: '#f8f9fa', minHeight: '100vh', padding: '32px' }}>
@@ -123,18 +138,18 @@ const Dashboard = (props) => {
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
                 />
                 <Line 
-                  type="monotone" 
-                  dataKey="income" 
-                  stroke="#3d82f6" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#3d82f6', strokeWidth: 2, stroke: '#fff' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="expense" 
-                  stroke="#ec4899" 
-                  strokeWidth={3} 
-                  dot={{ r: 4, fill: '#ec4899', strokeWidth: 2, stroke: '#fff' }}
+                   type="monotone" 
+                   dataKey="income" 
+                   stroke="#3d82f6" 
+                   strokeWidth={3} 
+                   dot={{ r: 4, fill: '#3d82f6', strokeWidth: 2, stroke: '#fff' }}
+                 />
+                 <Line 
+                   type="monotone" 
+                   dataKey="expense" 
+                   stroke="#ec4899" 
+                   strokeWidth={3} 
+                   dot={{ r: 4, fill: '#ec4899', strokeWidth: 2, stroke: '#fff' }}
                 />
               </LineChart>
             </ResponsiveContainer>

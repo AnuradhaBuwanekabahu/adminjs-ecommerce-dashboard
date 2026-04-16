@@ -99,87 +99,110 @@ module.exports = async function setupAdmin() {
     rootPath: "/admin",
     dashboard: {
       component: Components.Dashboard,
-      handler: async () => {
-        const productCount = await Product.count();
-        const categoryCount = await Category.count();
-        const orderCount = await Order.count();
-        const totalUsers = await User.count();
-        const settingCount = await Setting.count();
-        const totalIncome = await Order.sum('total') || 0;
-        
-        // --- Robust Best Sellers Aggregation ---
-        const allOrderItems = await OrderItem.findAll({
-          include: [{ model: Product, attributes: ['name', 'price'] }]
-        });
+      handler: async (request, response, context) => {
+        try {
+          console.log('[Dashboard Handler] Syncing live data...');
+          
+          const productCount = await Product.count();
+          const categoryCount = await Category.count();
+          const orderCount = await Order.count();
+          const totalUsers = await User.count();
+          const settingCount = await Setting.count();
+          
+          // Use a safer sum method or default to 0
+          const sumResult = await Order.sum('total');
+          const totalIncome = sumResult || 0;
+          
+          console.log(`[Dashboard Handler] Counts - Products: ${productCount}, Orders: ${orderCount}, Income: ${totalIncome}`);
 
-        const salesByProduct = allOrderItems.reduce((acc, item) => {
-          const id = item.ProductId;
-          if (!acc[id]) {
-            acc[id] = { 
-              id, 
-              name: (item.Product && item.Product.name) ? item.Product.name : `Product #${id}`,
-              totalSold: 0,
-              price: item.Product ? item.Product.price : 0
-            };
-          }
-          acc[id].totalSold += item.quantity;
-          return acc;
-        }, {});
+          // --- Robust Best Sellers Aggregation ---
+          const allOrderItems = await OrderItem.findAll({
+            include: [{ model: Product, attributes: ['name', 'price'] }]
+          });
 
-        const bestSellers = Object.values(salesByProduct)
-          .sort((a, b) => b.totalSold - a.totalSold)
-          .slice(0, 5);
+          const salesByProduct = allOrderItems.reduce((acc, item) => {
+            const id = item.ProductId;
+            if (!acc[id]) {
+              acc[id] = { 
+                id, 
+                name: (item.Product && item.Product.name) ? item.Product.name : `Product #${id}`,
+                totalSold: 0,
+                price: item.Product ? item.Product.price : 0
+              };
+            }
+            acc[id].totalSold += item.quantity;
+            return acc;
+          }, {});
 
-        // --- Robust Sales Aggregation (Last 7 Days) ---
-        // Ensuring we start from the very beginning of the day 7 days ago to avoid timezone gaps
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setHours(0, 0, 0, 0);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          const bestSellers = Object.values(salesByProduct)
+            .sort((a, b) => b.totalSold - a.totalSold)
+            .slice(0, 5);
 
-        const recentOrders = await Order.findAll({
-          where: {
-            createdAt: { [require('sequelize').Op.gte]: sevenDaysAgo }
-          },
-          order: [['createdAt', 'ASC']]
-        });
+          // --- Robust Sales Aggregation (Last 7 Days) ---
+          const { Op } = require('sequelize');
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setHours(0, 0, 0, 0);
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        // Diagnostic: Get the absolute latest order ID in the entire system
-        const latestOrder = await Order.findOne({ order: [['createdAt', 'DESC']] });
+          const recentOrders = await Order.findAll({
+            where: {
+              createdAt: { [Op.gte]: sevenDaysAgo }
+            },
+            order: [['createdAt', 'ASC']]
+          });
 
-        const salesByDay = recentOrders.reduce((acc, order) => {
-          const day = new Date(order.createdAt).toISOString().split('T')[0];
-          if (!acc[day]) {
-            acc[day] = { name: day, income: 0, expense: 0 };
-          }
-          acc[day].income += parseFloat(order.total);
-          acc[day].expense += parseFloat(order.total) * 0.4;
-          return acc;
-        }, {});
+          // Diagnostic: Get the absolute latest order ID in the entire system
+          const latestOrder = await Order.findOne({ order: [['createdAt', 'DESC']] });
 
-        const salesData = Object.values(salesByDay);
+          const salesByDay = recentOrders.reduce((acc, order) => {
+            const day = new Date(order.createdAt).toISOString().split('T')[0];
+            if (!acc[day]) {
+              acc[day] = { name: day, income: 0, expense: 0 };
+            }
+            acc[day].income += parseFloat(order.total);
+            acc[day].expense += parseFloat(order.total) * 0.4;
+            return acc;
+          }, {});
 
-        console.log('--- Dashboard Sync Details ---');
-        console.log('System Time:', new Date().toLocaleString());
-        console.log('Total Orders Found (7d):', recentOrders.length);
-        console.log('Latest System Order ID:', latestOrder ? latestOrder.id : 'None');
-        console.log('------------------------------');
+          const salesData = Object.values(salesByDay);
 
-        return {
-          totalIncome,
-          productCount,
-          categoryCount,
-          orderCount,
-          totalUsers,
-          settingCount,
-          bestSellers,
-          latestOrderId: latestOrder ? latestOrder.id : 'None',
-          categoryData: (await Category.findAll({ include: Product })).slice(0, 6).map(cat => ({
+          console.log('--- Dashboard Sync Details ---');
+          console.log('System Time:', new Date().toLocaleString());
+          console.log('Total Orders Found (7d):', recentOrders.length);
+          console.log('Latest System Order ID:', latestOrder ? latestOrder.id : 'None');
+          console.log('------------------------------');
+
+          const categoryData = (await Category.findAll({ include: Product })).slice(0, 6).map(cat => ({
             subject: cat.name,
             A: cat.Products ? cat.Products.length : 0,
             fullMark: 10
-          })),
-          salesData: salesData.length > 0 ? salesData : [{ name: 'No Recent Sales', income: 0, expense: 0 }],
-          lastUpdate: new Date().toLocaleTimeString()
+          }));
+
+          return {
+            totalIncome,
+            productCount,
+            categoryCount,
+            orderCount,
+            totalUsers,
+            settingCount,
+            bestSellers,
+            latestOrderId: latestOrder ? latestOrder.id : 'None',
+            categoryData,
+            salesData: salesData.length > 0 ? salesData : [{ name: 'No Recent Sales', income: 0, expense: 0 }],
+            lastUpdate: new Date().toLocaleTimeString()
+          };
+        } catch (error) {
+          console.error('[Dashboard Handler Error]:', error);
+          // Return at least some basic data so UI doesn't break
+          return {
+            totalIncome: 0,
+            productCount: 0,
+            orderCount: 0,
+            totalUsers: 0,
+            bestSellers: [],
+            salesData: [{ name: 'Error Loading Data', income: 0, expense: 0 }],
+            lastUpdate: 'Error: ' + new Date().toLocaleTimeString()
+          };
         }
       }
     },
