@@ -7,8 +7,8 @@ const Setting = sequelize.define("Setting", {
     allowNull: false,
     unique: true,
   },
-  value: {
-    type: DataTypes.TEXT, // better than STRING for flexibility
+  settingValue: {
+    type: DataTypes.STRING,
     allowNull: false,
   },
 });
